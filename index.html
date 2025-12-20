@@ -161,6 +161,12 @@
                     <option value="day">1 天</option>
                 </select>
             </div>
+            <div class="flex items-center space-x-2">
+                <label for="zoneId" class="text-sm font-medium">选择站点:</label>
+                <select id="zoneId" onchange="refreshData()" class="h-9 w-[240px] rounded-md border border-slate-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-900">
+                     <option value="*">加载中...</option>
+                </select>
+            </div>
             <!-- <button onclick="refreshData()" class="h-9 px-4 py-2 bg-slate-900 text-white hover:bg-slate-900/90 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 shadow">
                 刷新
             </button> -->
@@ -346,6 +352,56 @@
                     </div>
                     <div class="p-6 pt-0">
                         <div id="chart_origin_pull" class="w-full h-[350px]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Edge Functions (边缘函数) -->
+            <div class="space-y-4">
+                <h2 class="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    边缘函数 (Edge Functions)
+                </h2>
+                <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+                    <!-- Function Requests -->
+                    <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+                            <h3 class="tracking-tight text-sm font-medium text-muted-foreground">总请求数</h3>
+                        </div>
+                        <div class="p-6 pt-0">
+                            <div class="text-2xl font-bold" id="kpi_function_requestCount">加载中...</div>
+                            <p class="text-xs text-muted-foreground mt-1">Edge Functions 总调用次数</p>
+                        </div>
+                    </div>
+                    <!-- Function CPU Time -->
+                    <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div class="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
+                            <h3 class="tracking-tight text-sm font-medium text-muted-foreground">总 CPU 时间</h3>
+                        </div>
+                        <div class="p-6 pt-0">
+                            <div class="text-2xl font-bold" id="kpi_function_cpuCostTime">加载中...</div>
+                            <p class="text-xs text-muted-foreground mt-1">Edge Functions 总 CPU 耗时 (ms)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+                    <!-- Function Requests Chart -->
+                    <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div class="flex flex-col space-y-1.5 p-6">
+                            <h3 class="font-semibold leading-none tracking-tight">函数请求数趋势</h3>
+                        </div>
+                        <div class="p-6 pt-0">
+                            <div id="chart_function_requests" class="w-full h-[350px]"></div>
+                        </div>
+                    </div>
+                    <!-- Function CPU Chart -->
+                    <div class="rounded-xl border bg-card text-card-foreground shadow-sm">
+                        <div class="flex flex-col space-y-1.5 p-6">
+                            <h3 class="font-semibold leading-none tracking-tight">函数 CPU 耗时趋势</h3>
+                        </div>
+                        <div class="p-6 pt-0">
+                            <div id="chart_function_cpu" class="w-full h-[350px]"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -721,6 +777,8 @@
         let chartTopRequestUaOs = null;
         let chartTopRequestUa = null;
         let chartTopMap = null;
+        let chartFunctionRequests = null;
+        let chartFunctionCpu = null;
 
         const provinceMap = {
             '22': '北京', '86': '内蒙古', '146': '山西', '1069': '河北', '1177': '天津',
@@ -825,6 +883,7 @@
             originPull: ['l7Flow_outFlux_hy', 'l7Flow_inFlux_hy', 'l7Flow_outBandwidth_hy', 'l7Flow_inBandwidth_hy', 'l7Flow_request_hy'],
             requests: ['l7Flow_request'],
             performance: ['l7Flow_avgResponseTime', 'l7Flow_avgFirstByteResponseTime'],
+            edgeFunctions: ['function_requestCount', 'function_cpuCostTime'],
             security: ['ccAcl_interceptNum', 'ccManage_interceptNum', 'ccRate_interceptNum'],
             topAnalysis: ['l7Flow_outFlux_country', 'l7Flow_outFlux_province', 'l7Flow_outFlux_statusCode', 'l7Flow_outFlux_domain', 'l7Flow_outFlux_url', 'l7Flow_outFlux_resourceType', 'l7Flow_outFlux_sip', 'l7Flow_outFlux_referers', 'l7Flow_outFlux_ua_device', 'l7Flow_outFlux_ua_browser', 'l7Flow_outFlux_ua_os', 'l7Flow_outFlux_ua', 'l7Flow_request_country', 'l7Flow_request_province', 'l7Flow_request_statusCode', 'l7Flow_request_domain', 'l7Flow_request_url', 'l7Flow_request_resourceType', 'l7Flow_request_sip', 'l7Flow_request_referers', 'l7Flow_request_ua_device', 'l7Flow_request_ua_browser', 'l7Flow_request_ua_os', 'l7Flow_request_ua']
         };
@@ -844,6 +903,8 @@
             'l7Flow_request': '请求数',
             'l7Flow_avgResponseTime': '平均响应耗时',
             'l7Flow_avgFirstByteResponseTime': '平均首字节耗时',
+            'function_requestCount': 'Edge Functions 请求数',
+            'function_cpuCostTime': 'Edge Functions CPU 时间',
             'ccAcl_interceptNum': '精确防护拦截',
             'ccManage_interceptNum': '托管规则拦截',
             'ccRate_interceptNum': '速率限制拦截',
@@ -888,6 +949,8 @@
             'l7Flow_request': '#f43f5e', // rose
             'l7Flow_avgResponseTime': '#ef4444', // red
             'l7Flow_avgFirstByteResponseTime': '#f97316', // orange
+            'function_requestCount': '#8b5cf6', // purple
+            'function_cpuCostTime': '#06b6d4', // cyan
             'ccAcl_interceptNum': '#ef4444', // red
             'ccManage_interceptNum': '#f59e0b', // amber
             'ccRate_interceptNum': '#3b82f6', // blue
@@ -1000,10 +1063,14 @@
             try {
                 const { startTime, endTime } = calculateTimeRange();
                 const interval = document.getElementById('interval').value;
+                const zoneId = document.getElementById('zoneId').value.trim();
                 
                 let url = `/api/traffic?metric=${metric}&startTime=${encodeURIComponent(startTime)}&endTime=${encodeURIComponent(endTime)}`;
                 if (interval && interval !== 'auto') {
                     url += `&interval=${interval}`;
+                }
+                if (zoneId) {
+                    url += `&zoneId=${encodeURIComponent(zoneId)}`;
                 }
 
                 const response = await fetch(url);
@@ -1016,7 +1083,7 @@
             }
         }
 
-        function processData(result) {
+        function processData(result, targetMetric) {
             // Check for Top Data Structure (DescribeTopL7AnalysisData)
             // It returns Data[0].DetailData (Array of Key/Value)
             if (result?.Data?.[0]?.DetailData) {
@@ -1031,10 +1098,24 @@
             const dataList = result?.Data || result?.TimingDataRecords || [];
             if (dataList.length === 0) return { timeData: [], valueData: [], sum: 0, max: 0, avg: 0, type: 'time' };
 
-            let typeValue = dataList[0]?.TypeValue?.[0];
-            // Support DescribeWebProtectionData structure (Value instead of TypeValue)
-            if (!typeValue && dataList[0]?.Value?.[0]) {
-                typeValue = dataList[0].Value[0];
+            let typeValue;
+            
+            // Try to find matching metric in TypeValue or Value
+            if (targetMetric) {
+                if (dataList[0]?.TypeValue) {
+                    typeValue = dataList[0].TypeValue.find(item => item.MetricName === targetMetric);
+                } else if (dataList[0]?.Value) {
+                    typeValue = dataList[0].Value.find(item => item.MetricName === targetMetric);
+                }
+            }
+
+            // Fallback if not found or no targetMetric (or if only one exists)
+            if (!typeValue) {
+                 typeValue = dataList[0]?.TypeValue?.[0];
+                 // Support DescribeWebProtectionData structure (Value instead of TypeValue)
+                 if (!typeValue && dataList[0]?.Value?.[0]) {
+                    typeValue = dataList[0].Value[0];
+                 }
             }
 
             const details = typeValue?.Detail || [];
@@ -1143,6 +1224,52 @@
 
         /** Feature Functions **/
 
+        async function fetchZones() {
+            try {
+                const response = await fetch('/api/zones');
+                const result = await response.json();
+                
+                const select = document.getElementById('zoneId');
+                // Keep the current selection if possible, or default to *
+                const currentVal = select.value;
+                select.innerHTML = ''; 
+
+                // Always add "All Zones" option
+                const allOption = document.createElement('option');
+                allOption.value = "*";
+                allOption.text = "全部站点";
+                select.appendChild(allOption);
+
+                if (result.Zones && result.Zones.length > 0) {
+                    result.Zones.forEach(zone => {
+                        const option = document.createElement('option');
+                        option.value = zone.ZoneId;
+                        let text = zone.ZoneName;
+                        if (text === 'default-pages-zone') {
+                            text += ' (Pages站点)';
+                        }
+                        option.text = text;
+                        select.appendChild(option);
+                    });
+                }
+                
+                // Restore selection if it exists in new options, otherwise default to *
+                if (currentVal && Array.from(select.options).some(o => o.value === currentVal)) {
+                    select.value = currentVal;
+                } else {
+                    select.value = "*";
+                }
+
+            } catch (err) {
+                console.error("Error fetching zones:", err);
+                const select = document.getElementById('zoneId');
+                // If error, ensure we have at least the default * option
+                if (select.options.length === 0 || select.options[0].value !== '*') {
+                     select.innerHTML = '<option value="*">获取站点失败 (默认为全部)</option>';
+                }
+            }
+        }
+
         ////ENTRANCE////
         async function initDashboard() {
             // Initialize charts
@@ -1177,7 +1304,10 @@
             chartTopRequestUaOs = echarts.init(document.getElementById('chart_top_request_ua_os'));
             chartTopRequestUa = echarts.init(document.getElementById('chart_top_request_ua'));
             chartTopMap = echarts.init(document.getElementById('chart_top_map'));
+            chartFunctionRequests = echarts.init(document.getElementById('chart_function_requests'));
+            chartFunctionCpu = echarts.init(document.getElementById('chart_function_cpu'));
 
+            await fetchZones(); // Fetch zones first
             await refreshData();
         }
 
@@ -1199,6 +1329,7 @@
                 ...metricsConfig.originPull,
                 ...metricsConfig.requests,
                 ...metricsConfig.performance,
+                ...metricsConfig.edgeFunctions,
                 ...(isSecuritySupported ? metricsConfig.security : []),
                 ...metricsConfig.topAnalysis
             ];
@@ -1208,7 +1339,7 @@
             await Promise.all(allMetrics.map(async (metric) => {
                 const res = await fetchData(metric);
                 if (res) {
-                    results[metric] = processData(res);
+                    results[metric] = processData(res, metric);
                 }
             }));
 
@@ -1218,6 +1349,7 @@
             updateOriginPullSection(results); //3.
             updateRequestsSection(results); //4.
             updatePerformanceSection(results); //5.
+            updateEdgeFunctionsSection(results); // New
             updateSecuritySection(results); //5.1
             updateTopAnalysisSection(results); //6.
         }
@@ -1587,6 +1719,93 @@
                 series: series
             };
             chartPerformance.setOption(option);
+        }
+
+        function updateEdgeFunctionsSection(results) {
+            const metrics = metricsConfig.edgeFunctions;
+            
+            // Map metrics to specific charts and KPIs
+            const metricMap = {
+                'function_requestCount': {
+                    chart: chartFunctionRequests,
+                    kpiId: 'kpi_function_requestCount',
+                    unitType: 'count',
+                    color: metricColors['function_requestCount']
+                },
+                'function_cpuCostTime': {
+                    chart: chartFunctionCpu,
+                    kpiId: 'kpi_function_cpuCostTime',
+                    unitType: 'ms',
+                    color: metricColors['function_cpuCostTime']
+                }
+            };
+
+            metrics.forEach(metric => {
+                const config = metricMap[metric];
+                if (!config) return;
+
+                const data = results[metric];
+                if (!data || data.type !== 'time') return;
+
+                // Update KPI
+                const kpiEl = document.getElementById(config.kpiId);
+                if (kpiEl) {
+                    if (config.unitType === 'count') {
+                        kpiEl.innerText = formatCount(data.sum);
+                    } else if (config.unitType === 'ms') {
+                        // Format large numbers with commas
+                        kpiEl.innerText = data.sum.toLocaleString() + ' ms';
+                    }
+                }
+
+                // Chart
+                const chart = config.chart;
+                if (!chart) return;
+
+                let seriesData = data.valueData;
+                let unit = '';
+                let divisor = 1;
+
+                if (config.unitType === 'count') {
+                     const best = getBestCountUnit(Math.max(...data.valueData));
+                     unit = best.unit;
+                     divisor = best.divisor;
+                     seriesData = data.valueData.map(v => {
+                        const val = v / divisor;
+                        return (divisor === 1) ? val : val.toFixed(2);
+                     });
+                } else if (config.unitType === 'ms') {
+                     unit = 'ms';
+                }
+
+                const option = {
+                    tooltip: { trigger: 'axis', formatter: (params) => {
+                        let res = params[0].axisValue + '<br/>';
+                        params.forEach(param => {
+                            const val = data.valueData[param.dataIndex];
+                            let formattedVal = val;
+                            if (config.unitType === 'count') formattedVal = formatCount(val);
+                            else formattedVal = val.toLocaleString() + ' ms';
+                            
+                            res += `${param.marker}${param.seriesName}: ${formattedVal}<br/>`;
+                        });
+                        return res;
+                    }},
+                    legend: { data: [metricLabels[metric]], bottom: 0 },
+                    grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
+                    xAxis: { type: 'category', boundaryGap: false, data: data.timeData },
+                    yAxis: { type: 'value', name: unit },
+                    series: [{
+                        name: metricLabels[metric],
+                        type: 'line',
+                        smooth: true,
+                        data: seriesData,
+                        itemStyle: { color: config.color },
+                        areaStyle: { opacity: 0.1 }
+                    }]
+                };
+                chart.setOption(option);
+            });
         }
 
         //5.1. Security Section

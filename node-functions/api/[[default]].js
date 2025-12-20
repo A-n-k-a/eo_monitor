@@ -90,10 +90,50 @@ const SECURITY_METRICS = [
     'ccRate_interceptNum'
 ];
 
+// Metrics that belong to DescribeTimingFunctionAnalysisData (Edge Functions)
+const FUNCTION_METRICS = [
+    'function_requestCount',
+    'function_cpuCostTime'
+];
+
 app.get('/config', (req, res) => {
     res.json({
         siteName: process.env.SITE_NAME || 'AcoFork 的 EdgeOne 监控大屏'
     });
+});
+
+app.get('/zones', async (req, res) => {
+    try {
+        const { secretId, secretKey } = getKeys();
+        
+        if (!secretId || !secretKey) {
+            return res.status(500).json({ error: "Missing credentials" });
+        }
+
+        const TeoClient = teo.v20220901.Client;
+        const clientConfig = {
+            credential: {
+                secretId: secretId,
+                secretKey: secretKey,
+            },
+            region: "",
+            profile: {
+                httpProfile: {
+                    endpoint: "teo.tencentcloudapi.com",
+                },
+            },
+        };
+
+        const client = new TeoClient(clientConfig);
+        const params = {};
+        
+        console.log("Calling DescribeZones...");
+        const data = await client.DescribeZones(params);
+        res.json(data);
+    } catch (err) {
+        console.error("Error calling DescribeZones:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/traffic', async (req, res) => {
@@ -131,6 +171,8 @@ app.get('/traffic', async (req, res) => {
         const startTime = req.query.startTime || formatDate(yesterday);
         const endTime = req.query.endTime || formatDate(now);
         const interval = req.query.interval;
+        const zoneId = req.query.zoneId;
+        const zoneIds = zoneId ? [ zoneId ] : [ "*" ];
 
         let params = {};
         let data;
@@ -143,7 +185,7 @@ app.get('/traffic', async (req, res) => {
                 "StartTime": startTime,
                 "EndTime": endTime,
                 "MetricName": metric,
-                "ZoneIds": [ "*" ]
+                "ZoneIds": zoneIds
             };
             console.log("Calling DescribeTopL7AnalysisData with params:", JSON.stringify(params, null, 2));
             data = await client.DescribeTopL7AnalysisData(params);
@@ -153,7 +195,7 @@ app.get('/traffic', async (req, res) => {
                 "StartTime": startTime,
                 "EndTime": endTime,
                 "MetricNames": [ metric ],
-                "ZoneIds": [ "*" ]
+                "ZoneIds": zoneIds
             };
 
             if (interval && interval !== 'auto') {
@@ -183,13 +225,55 @@ app.get('/traffic', async (req, res) => {
             console.log("Calling DescribeWebProtectionData with params:", JSON.stringify(params, null, 2));
             data = await commonClient.request("DescribeWebProtectionData", params);
             
+        } else if (FUNCTION_METRICS.includes(metric)) {
+            // API: DescribeTimingFunctionAnalysisData (Edge Functions)
+            let metricNames = [metric];
+            if (metric === 'function_cpuCostTime') {
+                metricNames = ["function_requestCount", "function_cpuCostTime"];
+            }
+
+            params = {
+                "StartTime": startTime,
+                "EndTime": endTime,
+                "MetricNames": metricNames,
+                "ZoneIds": zoneIds
+            };
+
+            if (interval && interval !== 'auto') {
+                params["Interval"] = interval;
+            }
+
+            console.log("Calling DescribeTimingFunctionAnalysisData with params:", JSON.stringify(params, null, 2));
+            
+            // Use CommonClient for DescribeTimingFunctionAnalysisData
+            const commonClientConfig = {
+                credential: {
+                    secretId: secretId,
+                    secretKey: secretKey,
+                },
+                region: "",
+                profile: {
+                    httpProfile: {
+                        endpoint: "teo.tencentcloudapi.com",
+                    },
+                },
+            };
+
+            const commonClient = new CommonClient(
+                "teo.tencentcloudapi.com",
+                "2022-09-01",
+                commonClientConfig
+            );
+
+            data = await commonClient.request("DescribeTimingFunctionAnalysisData", params);
+
         } else {
             // API: DescribeTimingL7AnalysisData OR DescribeTimingL7OriginPullData
             params = {
                 "StartTime": startTime,
                 "EndTime": endTime,
                 "MetricNames": [ metric ],
-                "ZoneIds": [ "*" ]
+                "ZoneIds": zoneIds
             };
 
             if (interval && interval !== 'auto') {
